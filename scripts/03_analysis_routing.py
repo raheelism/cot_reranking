@@ -125,9 +125,9 @@ ax.set_title('CoT Length vs. Ranking Quality'); ax.legend()
 
 binned = [[], [], []]
 for l, n in zip(all_lengths, all_ndcg_r):
-    binned[0 if l < 50 else (1 if l < 150 else 2)].append(n)
+    binned[0 if l < 50 else (1 if l < 100 else 2)].append(n)
 ax2 = axes[1]
-bp = ax2.boxplot(binned, labels=['Short\n(<50)', 'Medium\n(50-150)', 'Long\n(>150)'], patch_artist=True)
+bp = ax2.boxplot(binned, labels=['Short\n(<50)', 'Medium\n(50-100)', 'Long\n(>100)'], patch_artist=True)
 for patch, color in zip(bp['boxes'], ['#4CAF50', '#FFC107', '#F44336']):
     patch.set_facecolor(color); patch.set_alpha(0.7)
 ax2.set_xlabel('CoT Length Bin'); ax2.set_ylabel('Per-Query NDCG@10')

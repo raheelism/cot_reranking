@@ -37,6 +37,7 @@ We address this gap with a controlled zero-shot study using Qwen2.5-3B-Instruct~
     \item \textbf{Complexity stratification.} CoT degrades performance uniformly across all query complexity levels---simple, medium, and complex---with statistically significant gaps ($p<0.05$) of similar magnitude ($\sim$0.05 NDCG@10) at every level.
     \item \textbf{Length--quality quantification.} Within the Reason-Point condition, longer CoT chains correlate weakly with better ranking (Spearman $\rho=0.14$, $p<0.0001$), but Pearson $r\approx0$ indicates no linear relationship.
     \item \textbf{Routing analysis (negative result).} A complexity-aware selective router that delegates complex queries to Reason-Point fails to recover Direct-Point performance on any dataset, confirming that no complexity stratum benefits from CoT at this scale.
+    \item \textbf{Colab-reproducible baseline.} All experiments run on a single free-tier T4 GPU with no specialized infrastructure, enabling the community to reproduce and extend these findings without access to large compute clusters.
 \end{enumerate}
 
 %% ============================================================
@@ -48,6 +49,9 @@ Large language models have been applied to document reranking in pointwise, pair
 
 \paragraph{Chain-of-thought in reranking.}
 Recent work has explored integrating CoT reasoning into reranking through supervised fine-tuning and reinforcement learning. Weller et al.~\cite{weller2025rank1} proposed Rank1, using test-time compute for pointwise reranking. Zhuang et al.~\cite{zhuang2025rankr1} applied RL to train reasoning-enhanced rerankers. Liu et al.~\cite{liu2025reasonrank} and Zhang et al.~\cite{zhang2025rearank} developed reasoning-focused reranking agents. Ji et al.~\cite{ji2025reasoningrank} used knowledge distillation to transfer reasoning capabilities. Yang et al.~\cite{yang2025rankk} extended reasoning to listwise reranking with test-time compute.
+
+\paragraph{Other reasoning-based approaches.}
+Several concurrent works have explored alternative architectures for incorporating reasoning into retrieval. RaCT~\cite{ract2024} and LIMRANK~\cite{limrank2025} represent recent efforts in this space that further motivate the need for a zero-shot, training-free baseline analysis such as ours.
 
 \paragraph{Challenges and negative results.}
 Lu et al.~\cite{lu2025rethinking} provided the most comprehensive negative result, showing that CoT consistently degrades pointwise reranking across multiple fine-tuned models. Jedidi et al.~\cite{jedidi2025dont} argued that reasoning is unnecessary for passage reranking, and Fan et al.~\cite{fan2025tfrank} proposed TFRank, a think-free approach that matches reasoning-based methods. Our work extends this line by examining the zero-shot setting, stratifying by query complexity, and quantifying the length--quality relationship.
@@ -72,7 +76,7 @@ The model receives a prompt containing the query and document, and is asked to o
 where $\ell_{\text{true}}$ and $\ell_{\text{false}}$ are the logits for the ``true'' and ``false'' tokens, respectively. A sanity check confirms perfect separation: $s=1.0$ for a clearly relevant pair and $s=0.0$ for a clearly irrelevant one.
 
 \paragraph{Reason-Point.}
-The model first generates a CoT explanation (up to 128 tokens) of why the document is or is not relevant to the query. We then extract the relevance score from the final ``true'' or ``false'' token in the generated sequence. Specifically, we perform a backward scan over the generated tokens to locate the last occurrence of ``true'' or ``false,'' then extract the corresponding logit from the generation scores at that position. The score is computed using the same softmax formula as Direct-Point.
+The model first generates a CoT explanation (up to 128 tokens) of why the document is or is not relevant to the query. We then extract the relevance score from the final ``true'' or ``false'' token in the generated sequence. Specifically, we perform a backward scan over the generated tokens to locate the last occurrence of ``true'' or ``false,'' then extract the corresponding logit from the generation scores at that position. The score is computed using the same softmax formula as Direct-Point. If neither token is found (e.g., the generation ends without a decision token), the document receives a score of 0.0, effectively ranking it last.
 
 \subsection{Datasets}
 
@@ -97,6 +101,7 @@ BRIGHT-Econ & BRIGHT & 50{,}220  & 103 \\
 \end{table}
 
 \subsection{Query Complexity Classification}
+\label{sec:complexity}
 
 We classify queries into three complexity levels using query-length terciles computed per dataset. Within each dataset, queries in the bottom third by token count are labeled \emph{simple}, the middle third \emph{medium}, and the top third \emph{complex}. This yields approximately balanced groups ($\sim$1/3 of queries per class per dataset), enabling fair comparison across complexity strata.
 
@@ -106,7 +111,7 @@ We implement a complexity-aware selective router that assigns simple and medium 
 
 \subsection{Evaluation Metrics}
 
-We report NDCG@10 as the primary ranking metric. Statistical significance for complexity stratification is assessed using the Mann--Whitney U test. We report Pearson $r$ and Spearman $\rho$ for the CoT length--quality analysis.
+We report NDCG@10 as the primary ranking metric. Statistical significance for complexity stratification is assessed using the Mann--Whitney U test. We report Pearson $r$ and Spearman $\rho$ for the CoT length--quality analysis. We note that rank-biased overlap~\cite{webber2010similarity} is an alternative metric robust to incomplete relevance judgments; NDCG@10 is preferred here for comparability with prior reranking work.
 
 %% ============================================================
 \section{Results}
@@ -140,7 +145,7 @@ Notably, Direct-Point consistently improves over BM25, with particularly large g
 
 \subsection{Complexity Stratification}
 
-Figure~\ref{fig:complexity} and Table~\ref{tab:complexity} present the complexity-stratified analysis, aggregated across all five datasets. The central finding is that CoT degrades performance \emph{uniformly} across all complexity levels. All three gaps are statistically significant ($p < 0.05$, Mann--Whitney U test) and of remarkably similar magnitude ($\sim$0.05 NDCG@10).
+Figure~\ref{fig:complexity} and Table~\ref{tab:complexity} present the complexity-stratified analysis, macro-averaged across all five datasets (mean of per-dataset NDCG@10 values). The central finding is that CoT degrades performance \emph{uniformly} across all complexity levels. All three gaps are statistically significant ($p < 0.05$, Mann--Whitney U test) and of remarkably similar magnitude ($\sim$0.05 NDCG@10).
 
 \begin{table}[t]
 \caption{Complexity-stratified results (NDCG@10, aggregated across all datasets). CoT degrades performance uniformly across all complexity levels.}
@@ -165,7 +170,7 @@ Complex & 0.3787 & 0.3250 & +0.0537 & 0.0342 \\
 \label{fig:complexity}
 \end{figure}
 
-This result is the most important finding of our study. The intuitive argument for CoT in reranking is that complex queries should benefit from step-by-step reasoning. Our data decisively refutes this: the gap between Direct-Point and Reason-Point on complex queries ($\Delta = +0.054$) is nearly identical to the gap on simple queries ($\Delta = +0.048$). CoT is not merely unhelpful for easy queries---it is consistently harmful regardless of query difficulty.
+This result is the most important finding of our study. The intuitive argument for CoT in reranking is that complex queries should benefit from step-by-step reasoning. Under our query-length-based complexity classification, the data decisively refutes this: the gap between Direct-Point and Reason-Point on complex queries ($\Delta = +0.054$) is nearly identical to the gap on simple queries ($\Delta = +0.048$). CoT is not merely unhelpful for easy queries---it is consistently harmful regardless of query difficulty.
 
 \subsection{CoT Length vs.\ Ranking Quality}
 
@@ -174,7 +179,7 @@ Figure~\ref{fig:length} shows the relationship between CoT length and NDCG@10 wi
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{fig2.png}
-\caption{CoT length vs.\ NDCG@10 within Reason-Point. Left: scatter plot with trend line showing near-zero linear relationship (Pearson $r = 0.01$). Right: boxplot by CoT length tercile showing a weak positive trend (Spearman $\rho = 0.14$).}
+\caption{CoT length vs.\ NDCG@10 within Reason-Point. Left: scatter plot with trend line showing near-zero linear relationship (Pearson $r = 0.01$). Right: boxplot by CoT length bin (Short $<$50, Medium 50--100, Long $>$100 tokens; upper bound reflects the 128-token generation cap) showing a weak positive trend (Spearman $\rho = 0.14$).}
 \label{fig:length}
 \end{figure}
 
@@ -184,7 +189,7 @@ The interpretation requires care. The positive Spearman $\rho$ indicates that qu
 \section{Analysis: Selective Routing}
 %% ============================================================
 
-Given the uniform degradation observed in Section~4.2, we test whether a selective routing strategy can recover performance by assigning only complex queries to Reason-Point while routing simple and medium queries to Direct-Point. Table~\ref{tab:routing} presents the results.
+Given the uniform degradation observed in Section~\ref{sec:complexity}, we test whether a selective routing strategy can recover performance by assigning only complex queries to Reason-Point while routing simple and medium queries to Direct-Point. Table~\ref{tab:routing} presents the results.
 
 \begin{table}[t]
 \caption{Selective routing results (NDCG@10). The router assigns complex queries to Reason-Point and all others to Direct-Point. It underperforms Direct-Point on every dataset.}
