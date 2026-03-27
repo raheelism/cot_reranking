@@ -1,0 +1,37 @@
+# Downloaded BEIR datasets (large)
+datasets/
+
+# Experiment results (saved to Google Drive)
+results/*.json
+
+# Generated figures
+figures/*.pdf
+figures/*.png
+figures/*.svg
+
+# User-filled query labels (not the template)
+data/query_labels.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Downloaded dataset zips
+*.zip
+
+# Compiled paper output
+paper/*.pdf
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.bbl
+paper/*.blg
+
+# Context PDFs (large binaries — add manually if needed)
+context/*.pdf
+context/*.docx

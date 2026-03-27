@@ -1,0 +1,9 @@
+beir
+rank_bm25
+sentence-transformers
+datasets
+transformers
+torch
+scikit-learn
+scipy
+matplotlib
