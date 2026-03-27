@@ -2,6 +2,7 @@ import os
 import json
 from beir import util
 from beir.datasets.data_loader import GenericDataLoader
+from rank_bm25 import BM25Okapi
 
 
 BEIR_DATASETS = {
@@ -62,3 +63,27 @@ def load_json(path: str) -> dict:
     """Load a dictionary from a JSON file."""
     with open(path) as f:
         return json.load(f)
+
+
+def build_bm25_index(corpus: dict) -> tuple:
+    """Build BM25 index over corpus. Returns (bm25, corpus_ids)."""
+    corpus_ids = list(corpus.keys())
+    tokenized = [corpus[did]['text'].lower().split() for did in corpus_ids]
+    bm25 = BM25Okapi(tokenized)
+    print(f"✓ BM25 index built: {len(corpus_ids)} docs")
+    return bm25, corpus_ids
+
+
+def retrieve_bm25_top_k(bm25, corpus_ids: list, queries: dict, k: int = 100) -> dict:
+    """Retrieve top-k docs per query. Returns {qid: {did: score}}."""
+    import numpy as np
+    results = {}
+    for i, (qid, query_text) in enumerate(queries.items()):
+        tokenized_q = query_text.lower().split()
+        scores = bm25.get_scores(tokenized_q)
+        top_k_idx = scores.argsort()[-k:][::-1]
+        results[qid] = {corpus_ids[j]: float(scores[j]) for j in top_k_idx}
+        if (i + 1) % 50 == 0:
+            print(f"  Processed {i+1}/{len(queries)} queries")
+    print(f"✓ BM25 retrieval done: {len(results)} queries")
+    return results
