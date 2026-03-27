@@ -9,11 +9,17 @@ import os, sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
-# ── Drive mount ────────────────────────────────────────────────────────────────
-from google.colab import drive
-drive.mount('/content/drive')
+# ── Results directory ──────────────────────────────────────────────────────────
+RESULTS_DIR = os.environ.get('RESULTS_DIR', '')
 
-RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
+if not RESULTS_DIR:
+    try:
+        from google.colab import drive
+        drive.mount('/content/drive')
+        RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
+    except Exception:
+        RESULTS_DIR = os.path.join(PROJECT_ROOT, 'results')
+
 os.makedirs(RESULTS_DIR, exist_ok=True)
 print(f'✓ Results dir: {RESULTS_DIR}')
 

@@ -28,9 +28,9 @@ if not RESULTS_DIR:
         from google.colab import drive
         drive.mount('/content/drive')
         RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
-    except ModuleNotFoundError:
-        # Kaggle or other platform — use local working dir
-        RESULTS_DIR = '/kaggle/working/cot_reranking_results'
+    except Exception:
+        # Kaggle or any platform where Drive mount isn't available
+        RESULTS_DIR = os.path.join(PROJECT_ROOT, 'results')
 
 os.makedirs(RESULTS_DIR, exist_ok=True)
 print(f'✓ Results dir: {RESULTS_DIR}')

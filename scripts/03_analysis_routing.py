@@ -17,12 +17,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats as scipy_stats
 
-# ── Drive mount ────────────────────────────────────────────────────────────────
-from google.colab import drive
-drive.mount('/content/drive')
+# ── Results directory ──────────────────────────────────────────────────────────
+RESULTS_DIR = os.environ.get('RESULTS_DIR', '')
 
-RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
-FIGURES_DIR  = f'{RESULTS_DIR}/figures'
+if not RESULTS_DIR:
+    try:
+        from google.colab import drive
+        drive.mount('/content/drive')
+        RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
+    except Exception:
+        RESULTS_DIR = os.path.join(PROJECT_ROOT, 'results')
+
+FIGURES_DIR = f'{RESULTS_DIR}/figures'
 os.makedirs(FIGURES_DIR, exist_ok=True)
 
 from src.data_utils import load_json, save_json
