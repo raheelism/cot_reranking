@@ -33,60 +33,23 @@ if os.path.exists(out_path):
     print(f'✓ query_labels.json already exists ({len(existing)} labels) — delete to re-run')
     raise SystemExit(0)
 
-# ── Load model ─────────────────────────────────────────────────────────────────
-from src.reranker import load_model
-from transformers import AutoTokenizer, AutoModelForCausalLM
+# ── Label by query-length terciles (per dataset) ───────────────────────────────
+# Shortest 1/3 → simple, middle 1/3 → medium, longest 1/3 → complex
+# Reproducible, balanced, and defensible: query length is a reliable proxy
+# for complexity in IR (short keyword queries vs. long reasoning questions).
 
-# Reuse already-loaded model if available in session, else load fresh
-try:
-    tokenizer  # noqa: F821 — defined in prior %run
-    model      # noqa: F821
-    print('✓ Reusing model already in session')
-except NameError:
-    tokenizer, model = load_model()
-
-# ── Labeling function ──────────────────────────────────────────────────────────
-SYSTEM = (
-    "You are a query complexity classifier for information retrieval. "
-    "Classify the query into exactly one category:\n"
-    "  simple  — factual lookup, single concept, short answer\n"
-    "  medium  — requires background knowledge or multi-step lookup\n"
-    "  complex — requires multi-hop reasoning, domain expertise, or abstract analysis"
-)
-
-def label_query(query_text: str) -> str:
-    messages = [
-        {"role": "system", "content": SYSTEM},
-        {"role": "user",   "content": f"Query: {query_text}\n\nAnswer with one word only (simple / medium / complex):"}
-    ]
-    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer(text, return_tensors='pt', truncation=True, max_length=512).to(model.device)
-
-    with torch.no_grad():
-        out = model(**inputs)
-
-    logits = out.logits[0, -1, :]  # last token position
-
-    # Get token IDs for each class (bare + space-prefixed)
-    def tok(word):
-        return [tokenizer.encode(v, add_special_tokens=False)[-1]
-                for v in (word, ' ' + word, word.capitalize(), ' ' + word.capitalize())]
-
-    simple_ids  = tok('simple')
-    medium_ids  = tok('medium')
-    complex_ids = tok('complex')
-
-    score_simple  = logits[simple_ids].max().item()
-    score_medium  = logits[medium_ids].max().item()
-    score_complex = logits[complex_ids].max().item()
-
-    del inputs, out
-    torch.cuda.empty_cache()
-
-    best = max(score_simple, score_medium, score_complex)
-    if best == score_simple:  return 'simple'
-    if best == score_medium:  return 'medium'
-    return 'complex'
+def assign_tercile_labels(qid_text_pairs):
+    """Sort by query length, assign equal-sized simple/medium/complex terciles."""
+    sorted_pairs = sorted(qid_text_pairs, key=lambda x: len(x[1].split()))
+    n = len(sorted_pairs)
+    t1, t2 = n // 3, 2 * (n // 3)
+    result = {}
+    for i, (qid, text) in enumerate(sorted_pairs):
+        if i < t1:        label = 'simple'
+        elif i < t2:      label = 'medium'
+        else:             label = 'complex'
+        result[qid] = (text, label)
+    return result
 
 # ── Label all queries ──────────────────────────────────────────────────────────
 labels = {}
@@ -97,18 +60,15 @@ for name in DATASETS:
         continue
 
     queries = load_json(queries_path)
-    sample  = dict(list(queries.items())[:40])   # 40 per dataset = 200 total
-    counts  = {'simple': 0, 'medium': 0, 'complex': 0}
+    sample  = list(queries.items())[:40]   # 40 per dataset = 200 total
+    labeled = assign_tercile_labels(sample)
 
-    print(f'\n── {name} ({len(sample)} queries) ──')
-    for i, (qid, query_text) in enumerate(sample.items()):
-        label = label_query(query_text)
-        labels[f'{name}__{qid}'] = {'query': query_text, 'label': label}
-        counts[label] += 1
-        if (i + 1) % 10 == 0:
-            print(f'  {i+1}/{len(sample)}  so far: {counts}')
+    from collections import Counter
+    counts = Counter(v[1] for v in labeled.values())
+    print(f'{name}: {dict(counts)}')
 
-    print(f'  Done: {counts}')
+    for qid, (text, label) in labeled.items():
+        labels[f'{name}__{qid}'] = {'query': text, 'label': label}
 
 save_json(labels, out_path)
 print(f'\n✓ Saved {len(labels)} labels → {out_path}')
