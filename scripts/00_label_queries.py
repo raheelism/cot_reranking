@@ -1,14 +1,13 @@
 """
-Auto-label query complexity using Qwen2.5-3B-Instruct.
-Scores logits for 'simple' / 'medium' / 'complex' at the answer position.
+Auto-label query complexity by query-length terciles (per dataset).
+Shortest 1/3 → simple, middle 1/3 → medium, longest 1/3 → complex.
 
-Run AFTER 02_inference.py (reuses the loaded model) or standalone:
+CPU-only, no model needed. Run any time after 01_data_bm25.py:
     %run scripts/00_label_queries.py
 
 Output: {RESULTS_DIR}/query_labels.json  (compatible with src/classifier.py)
 """
 import os, sys
-import torch
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
