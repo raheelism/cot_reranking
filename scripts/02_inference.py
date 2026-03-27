@@ -38,7 +38,7 @@ print(f'  Found {len(_files)} JSON files: {_files if _files else "none"}')
 
 # ── Checkpoint helper ──────────────────────────────────────────────────────────
 def is_done(name):
-    """Return True if all output files for this dataset already exist."""
+    """Return True if all final output files for this dataset exist."""
     required = [
         f'{RESULTS_DIR}/{name}_direct.json',
         f'{RESULTS_DIR}/{name}_reason.json',
@@ -49,7 +49,12 @@ def is_done(name):
     ]
     missing = [os.path.basename(f) for f in required if not os.path.exists(f)]
     if missing:
-        print(f'  Missing for {name}: {missing}')
+        # Check for in-progress partial files
+        for mode in ('direct', 'reason'):
+            p = f'{RESULTS_DIR}/{name}_{mode}_partial.json'
+            if os.path.exists(p):
+                n = len(load_json(p))
+                print(f'  Found partial {mode} checkpoint: {n} queries done')
     return len(missing) == 0
 
 # ── Load model ─────────────────────────────────────────────────────────────────
@@ -113,14 +118,69 @@ for name in DATASETS:
     else:
         bm25_results = load_json(bm25_path)
 
-    print(f'\n=== {name}: Direct-Point ===')
-    direct_results, _ = rerank_dataset(corpus, queries, bm25_results, tokenizer, model, mode='direct')
-    save_json(direct_results, f'{RESULTS_DIR}/{name}_direct.json')
+    from src.reranker import score_direct, score_reason
+    import torch
 
-    print(f'\n=== {name}: Reason-Point ===')
-    reason_results, cot_lengths = rerank_dataset(corpus, queries, bm25_results, tokenizer, model, mode='reason')
-    save_json(reason_results,  f'{RESULTS_DIR}/{name}_reason.json')
-    save_json(cot_lengths,     f'{RESULTS_DIR}/{name}_cot_lengths.json')
+    def run_mode(mode):
+        """Run inference for one mode with per-query checkpointing every 50 queries."""
+        partial_scores = f'{RESULTS_DIR}/{name}_{mode}_partial.json'
+        partial_cots   = f'{RESULTS_DIR}/{name}_cot_partial.json'
+
+        # Resume from partial if exists
+        scores_so_far = load_json(partial_scores) if os.path.exists(partial_scores) else {}
+        cots_so_far   = load_json(partial_cots)   if os.path.exists(partial_cots)   else {}
+        done_qids     = set(scores_so_far.keys())
+
+        remaining = {qid: q for qid, q in queries.items() if qid not in done_qids}
+        if done_qids:
+            print(f'  Resuming {mode}: {len(done_qids)} done, {len(remaining)} remaining')
+
+        print(f'\n=== {name}: {mode}-Point ===')
+        for i, (qid, query_text) in enumerate(remaining.items()):
+            if qid not in bm25_results:
+                continue
+            top_docs = list(bm25_results[qid].keys())
+            doc_scores, lengths = {}, []
+
+            for did in top_docs:
+                passage = corpus.get(did, {}).get('text', '')
+                if not passage:
+                    doc_scores[did] = 0.0
+                    continue
+                if mode == 'direct':
+                    doc_scores[did] = score_direct(query_text, passage, tokenizer, model)
+                else:
+                    s, cot_len, _ = score_reason(query_text, passage, tokenizer, model,
+                                                 max_cot_tokens=128)
+                    doc_scores[did] = s
+                    lengths.append(cot_len)
+
+            scores_so_far[qid] = doc_scores
+            if mode == 'reason' and lengths:
+                cots_so_far[qid] = sum(lengths) / len(lengths)
+
+            done_total = len(done_qids) + i + 1
+            total      = len(queries)
+            if done_total % 10 == 0:
+                print(f'  [{mode}] {done_total}/{total} queries done')
+
+            # Save checkpoint every 50 queries
+            if (i + 1) % 50 == 0:
+                save_json(scores_so_far, partial_scores)
+                if mode == 'reason':
+                    save_json(cots_so_far, partial_cots)
+                print(f'  ✓ Checkpoint saved at {done_total}/{total}')
+
+        # Final save — remove partial files
+        save_json(scores_so_far, f'{RESULTS_DIR}/{name}_{mode}.json')
+        if mode == 'reason':
+            save_json(cots_so_far, f'{RESULTS_DIR}/{name}_cot_lengths.json')
+        for f in [partial_scores, partial_cots]:
+            if os.path.exists(f): os.remove(f)
+        return scores_so_far, cots_so_far
+
+    direct_results, _ = run_mode('direct')
+    reason_results, cot_lengths = run_mode('reason')
 
     pq_direct = compute_per_query_ndcg(direct_results, qrels)
     pq_reason = compute_per_query_ndcg(reason_results, qrels)
