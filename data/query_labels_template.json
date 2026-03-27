@@ -1,0 +1,5 @@
+{
+  "nfcorpus__q1": {"query": "sample factual query about medicine", "label": null},
+  "bright_biology__q1": {"query": "how does mitosis differ from meiosis in terms of genetic outcome", "label": null},
+  "bright_economics__q1": {"query": "GDP growth", "label": null}
+}
