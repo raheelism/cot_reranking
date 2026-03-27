@@ -2,6 +2,7 @@
 datasets/
 
 # Experiment results (saved to Google Drive)
+results/**/*.json
 results/*.json
 
 # Generated figures

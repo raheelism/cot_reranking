@@ -42,41 +42,20 @@ for name, vals in summary.items():
     delta = vals['direct'] - vals['reason']
     print(f"{name:<22} {vals['bm25']:>8.4f} {vals['direct']:>8.4f} {vals['reason']:>8.4f} {delta:>+8.4f}")
 
-# ── Query labels ───────────────────────────────────────────────────────────────
-labels_path = os.path.join(PROJECT_ROOT, 'data', 'query_labels.json')
-if not os.path.exists(labels_path):
-    labels_path = f'{RESULTS_DIR}/query_labels.json'
-
-if not os.path.exists(labels_path):
-    # Generate template from actual query IDs
-    template = {}
-    for name in DATASETS:
-        queries = load_json(f'{RESULTS_DIR}/{name}_queries.json')
-        for qid in list(queries.keys())[:40]:
-            template[f'{name}__{qid}'] = {'query': queries[qid], 'label': None}
-
-    template_out = f'{RESULTS_DIR}/query_labels_template.json'
-    with open(template_out, 'w') as f:
-        json.dump(template, f, indent=2)
-
-    print(f'\n✓ Template saved: {len(template)} queries → {template_out}')
-    print('\nACTION REQUIRED:')
-    print('  1. Download query_labels_template.json from Drive')
-    print('  2. Fill each "label" field: "simple", "medium", or "complex"')
-    print('  3. Save as query_labels.json in the same Drive folder')
-    print('  4. Re-run this script')
-    raise SystemExit('Labels not found — complete labeling and re-run')
-
-# ── Train classifier ───────────────────────────────────────────────────────────
-from src.classifier import load_labels, train_classifier, predict_complexity
-
-queries_labeled, labels = load_labels(labels_path)
-encoder, clf = train_classifier(queries_labeled, labels)
+# ── Complexity by query-length terciles (per dataset, all queries) ─────────────
+# Computed directly on full query set — balanced, reproducible, no classifier bias.
+def length_tercile_complexity(queries_dict):
+    sorted_qids = sorted(queries_dict, key=lambda q: len(queries_dict[q].split()))
+    n  = len(sorted_qids)
+    t1 = n // 3
+    t2 = 2 * (n // 3)
+    return {qid: ('simple' if i < t1 else 'medium' if i < t2 else 'complex')
+            for i, qid in enumerate(sorted_qids)}
 
 all_complexity = {}
 for name in DATASETS:
     queries = load_json(f'{RESULTS_DIR}/{name}_queries.json')
-    all_complexity[name] = predict_complexity(queries, encoder, clf)
+    all_complexity[name] = length_tercile_complexity(queries)
     print(f'{name}: {dict(Counter(all_complexity[name].values()))}')
 
 save_json(all_complexity, f'{RESULTS_DIR}/all_complexity.json')
