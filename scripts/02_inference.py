@@ -93,10 +93,21 @@ for name in DATASETS:
         print(f'⏭  {name} — already done (Direct={d:.4f}, Reason={r:.4f}) — skipping')
         continue
 
-    corpus       = all_data[name]['corpus']
-    queries      = all_data[name]['queries']
-    qrels        = all_data[name]['qrels']
-    bm25_results = load_json(f'{RESULTS_DIR}/{name}_bm25.json')
+    corpus  = all_data[name]['corpus']
+    queries = all_data[name]['queries']
+    qrels   = all_data[name]['qrels']
+
+    bm25_path = f'{RESULTS_DIR}/{name}_bm25.json'
+    if not os.path.exists(bm25_path):
+        print(f'  BM25 not found for {name} — generating now (CPU, ~5 min)...')
+        from src.data_utils import build_bm25_index, retrieve_bm25_top_k
+        bm25_idx, corpus_ids = build_bm25_index(corpus)
+        bm25_results = retrieve_bm25_top_k(bm25_idx, corpus_ids, queries, k=100)
+        save_json(bm25_results, bm25_path)
+        save_json(qrels,   f'{RESULTS_DIR}/{name}_qrels.json')
+        save_json(queries, f'{RESULTS_DIR}/{name}_queries.json')
+    else:
+        bm25_results = load_json(bm25_path)
 
     print(f'\n=== {name}: Direct-Point ===')
     direct_results, _ = rerank_dataset(corpus, queries, bm25_results, tokenizer, model, mode='direct')
