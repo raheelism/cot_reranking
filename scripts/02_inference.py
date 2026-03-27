@@ -39,11 +39,13 @@ else:
 
 os.makedirs(RESULTS_DIR, exist_ok=True)
 print(f'✓ Results dir: {RESULTS_DIR}')
+_files = sorted(f for f in os.listdir(RESULTS_DIR) if f.endswith('.json'))
+print(f'  Found {len(_files)} JSON files: {_files if _files else "none"}')
 
 # ── Checkpoint helper ──────────────────────────────────────────────────────────
 def is_done(name):
     """Return True if all output files for this dataset already exist."""
-    files = [
+    required = [
         f'{RESULTS_DIR}/{name}_direct.json',
         f'{RESULTS_DIR}/{name}_reason.json',
         f'{RESULTS_DIR}/{name}_cot_lengths.json',
@@ -51,7 +53,10 @@ def is_done(name):
         f'{RESULTS_DIR}/{name}_pq_reason.json',
         f'{RESULTS_DIR}/{name}_pq_bm25.json',
     ]
-    return all(os.path.exists(f) for f in files)
+    missing = [os.path.basename(f) for f in required if not os.path.exists(f)]
+    if missing:
+        print(f'  Missing for {name}: {missing}')
+    return len(missing) == 0
 
 # ── Load model ─────────────────────────────────────────────────────────────────
 from src.reranker import load_model, score_direct, rerank_dataset
