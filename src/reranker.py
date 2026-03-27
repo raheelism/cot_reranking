@@ -85,15 +85,18 @@ def score_reason(query: str, passage: str, tokenizer, model,
 
     gen_ids  = generated.sequences[0][inputs['input_ids'].shape[1]:]
     cot_text = tokenizer.decode(gen_ids, skip_special_tokens=True)
-    cot_length = len(gen_ids)
+    cot_length = len(tokenizer(cot_text, add_special_tokens=False)['input_ids'])
 
     # Step 2: Find last true/false token in generated sequence, extract its logit
-    true_id  = tokenizer.encode('true',  add_special_tokens=False)[-1]
-    false_id = tokenizer.encode('false', add_special_tokens=False)[-1]
+    true_ids  = set(tokenizer.encode(t, add_special_tokens=False)[-1]
+                    for t in ('true', ' true', 'True', ' True'))
+    false_ids = set(tokenizer.encode(t, add_special_tokens=False)[-1]
+                    for t in ('false', ' false', 'False', ' False'))
+    answer_token_ids = true_ids | false_ids
 
     answer_pos = None
     for i in range(len(gen_ids) - 1, -1, -1):
-        if gen_ids[i].item() in (true_id, false_id):
+        if gen_ids[i].item() in answer_token_ids:
             answer_pos = i
             break
 
@@ -101,9 +104,13 @@ def score_reason(query: str, passage: str, tokenizer, model,
         answer_logits = generated.scores[answer_pos][0]
     else:
         # Fallback: use last generated token's logits
+        print(f"  Warning: no true/false token found in generation — using fallback logits")
         answer_logits = generated.scores[-1][0]
 
-    score = torch.softmax(answer_logits[[true_id, false_id]], dim=0)[0].item()
+    # Use canonical bare-string IDs for the final softmax
+    true_id_canonical  = tokenizer.encode('true',  add_special_tokens=False)[-1]
+    false_id_canonical = tokenizer.encode('false', add_special_tokens=False)[-1]
+    score = torch.softmax(answer_logits[[true_id_canonical, false_id_canonical]], dim=0)[0].item()
 
     del inputs, generated
     torch.cuda.empty_cache()

@@ -3,13 +3,16 @@ from typing import Dict
 
 def selective_route(direct_results: Dict[str, Dict[str, float]],
                     reason_results: Dict[str, Dict[str, float]],
-                    complexity: Dict[str, str],
-                    simple_threshold: str = 'simple') -> Dict[str, Dict[str, float]]:
+                    complexity: Dict[str, str]) -> Dict[str, Dict[str, float]]:
     """
     Route each query to Direct or Reason based on complexity.
     simple + medium → Direct-Point; complex → Reason-Point.
     Returns merged results dict in same format as input.
     """
+    if set(direct_results) != set(reason_results):
+        missing = set(direct_results).symmetric_difference(set(reason_results))
+        print(f"Warning: {len(missing)} qids present in only one result dict")
+
     routed = {}
     route_counts = {'direct': 0, 'reason': 0}
 
