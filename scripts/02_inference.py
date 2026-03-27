@@ -123,8 +123,17 @@ for name in DATASETS:
 
     def run_mode(mode):
         """Run inference for one mode with per-query checkpointing every 50 queries."""
+        final_path     = f'{RESULTS_DIR}/{name}_{mode}.json'
         partial_scores = f'{RESULTS_DIR}/{name}_{mode}_partial.json'
         partial_cots   = f'{RESULTS_DIR}/{name}_cot_partial.json'
+
+        # Final file already exists — skip inference entirely
+        if os.path.exists(final_path):
+            print(f'  ⏭ {name} {mode} scores already saved — skipping inference')
+            cots = load_json(f'{RESULTS_DIR}/{name}_cot_lengths.json') \
+                   if mode == 'reason' and os.path.exists(f'{RESULTS_DIR}/{name}_cot_lengths.json') \
+                   else {}
+            return load_json(final_path), cots
 
         # Resume from partial if exists
         scores_so_far = load_json(partial_scores) if os.path.exists(partial_scores) else {}
