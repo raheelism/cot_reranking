@@ -1,7 +1,14 @@
 """
 Script 2: Direct-Point + Reason-Point inference on all 5 datasets
-Run in Colab with: %run scripts/02_inference.py
+Run in Colab/Kaggle with: %run scripts/02_inference.py
 ~3-4 hours on T4 GPU — requires GPU runtime
+
+RESUME SAFE: automatically skips datasets already completed.
+Results are loaded from Drive for skipped datasets so summary stays complete.
+
+Platforms:
+  Colab:  RESULTS_DIR auto-set to Google Drive
+  Kaggle: set RESULTS_DIR env var or edit below, sync Drive via rclone
 """
 import os, sys
 import torch
@@ -13,19 +20,39 @@ assert torch.cuda.is_available(), 'GPU required. Runtime > Change runtime type >
 print(f'✓ GPU: {torch.cuda.get_device_name(0)}')
 print(f'  VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')
 
-# ── Drive mount ────────────────────────────────────────────────────────────────
-from google.colab import drive
-drive.mount('/content/drive')
+# ── Results directory — set via env var or platform default ───────────────────
+RESULTS_DIR = os.environ.get('RESULTS_DIR', '')
 
-RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
+if not RESULTS_DIR:
+    try:
+        from google.colab import drive
+        drive.mount('/content/drive')
+        RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
+    except ModuleNotFoundError:
+        # Kaggle or other platform — use local working dir
+        RESULTS_DIR = '/kaggle/working/cot_reranking_results'
+
 os.makedirs(RESULTS_DIR, exist_ok=True)
 print(f'✓ Results dir: {RESULTS_DIR}')
 
+# ── Checkpoint helper ──────────────────────────────────────────────────────────
+def is_done(name):
+    """Return True if all output files for this dataset already exist."""
+    files = [
+        f'{RESULTS_DIR}/{name}_direct.json',
+        f'{RESULTS_DIR}/{name}_reason.json',
+        f'{RESULTS_DIR}/{name}_cot_lengths.json',
+        f'{RESULTS_DIR}/{name}_pq_direct.json',
+        f'{RESULTS_DIR}/{name}_pq_reason.json',
+        f'{RESULTS_DIR}/{name}_pq_bm25.json',
+    ]
+    return all(os.path.exists(f) for f in files)
+
 # ── Load model ─────────────────────────────────────────────────────────────────
-from src.reranker import load_model, score_direct, score_reason, rerank_dataset
+from src.reranker import load_model, score_direct, rerank_dataset
 tokenizer, model = load_model()
 
-# ── Sanity check ───────────────────────────────────────────────────────────────
+# Sanity check
 s_rel = score_direct('where do elephants live',
     'Elephants inhabit savannas, forests, and deserts across Africa and South Asia.',
     tokenizer, model)
@@ -50,9 +77,22 @@ for subset in ['biology', 'economics']:
     corpus, queries, qrels = load_bright_dataset(subset)
     all_data[f'bright_{subset}'] = {'corpus': corpus, 'queries': queries, 'qrels': qrels}
 
-# ── Inference loop ─────────────────────────────────────────────────────────────
+# ── Inference loop with resume ─────────────────────────────────────────────────
 summary = {}
 for name in DATASETS:
+    if is_done(name):
+        pq_direct = load_json(f'{RESULTS_DIR}/{name}_pq_direct.json')
+        pq_reason = load_json(f'{RESULTS_DIR}/{name}_pq_reason.json')
+        pq_bm25   = load_json(f'{RESULTS_DIR}/{name}_pq_bm25.json')
+        summary[name] = {
+            'bm25':   mean_ndcg(pq_bm25),
+            'direct': mean_ndcg(pq_direct),
+            'reason': mean_ndcg(pq_reason),
+        }
+        d, r = summary[name]['direct'], summary[name]['reason']
+        print(f'⏭  {name} — already done (Direct={d:.4f}, Reason={r:.4f}) — skipping')
+        continue
+
     corpus       = all_data[name]['corpus']
     queries      = all_data[name]['queries']
     qrels        = all_data[name]['qrels']
@@ -84,4 +124,4 @@ for name in DATASETS:
     print(f'  BM25={summary[name]["bm25"]:.4f} | Direct={d:.4f} | Reason={r:.4f} | Δ={d - r:+.4f}')
 
 save_json(summary, f'{RESULTS_DIR}/summary_ndcg.json')
-print('\n✓ All inference complete and saved to Drive')
+print('\n✓ All inference complete and saved')
