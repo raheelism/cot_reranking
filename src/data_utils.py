@@ -22,27 +22,29 @@ def load_beir_dataset(name: str, data_dir: str = 'datasets') -> tuple:
 
 
 def load_bright_dataset(subset: str) -> tuple:
-    """Load a BRIGHT subset from HuggingFace. subset: 'biology' or 'economics'."""
+    """Load a BRIGHT subset from HuggingFace. subset: 'biology' or 'economics'.
+    Returns (corpus, queries, qrels) in BEIR format.
+    corpus: {doc_id: {'text': content_str}}
+    queries: {query_id: query_str}
+    qrels: {query_id: {doc_id: 1}}
+    """
     from datasets import load_dataset
     assert subset in ('biology', 'economics'), f"Use 'biology' or 'economics', got: {subset}"
 
-    ds = load_dataset('xlangai/BRIGHT', subset, split='test')
+    # Load queries and corpus as separate configs
+    examples = load_dataset('xlangai/BRIGHT', 'examples')[subset]
+    doc_list = load_dataset('xlangai/BRIGHT', 'documents')[subset]
 
-    # Build corpus, queries, qrels in BEIR format
-    corpus, queries, qrels = {}, {}, {}
-    for row in ds:
-        qid = str(row['id'])
-        queries[qid] = row['query']
-        qrels[qid] = {}
-        for doc in row['gold_ids']:
-            did = str(doc)
-            corpus[did] = {'text': row['documents'][row['gold_ids'].index(doc)]}
-            qrels[qid][did] = 1
-        # Add negative docs
-        for i, doc_text in enumerate(row['documents']):
-            did = f"{qid}_doc_{i}"
-            if did not in corpus:
-                corpus[did] = {'text': doc_text}
+    # Build corpus: {doc_id: {'text': content}}
+    corpus = {dp['id']: {'text': dp['content']} for dp in doc_list}
+
+    # Build queries and qrels
+    queries, qrels = {}, {}
+    for e in examples:
+        qid = str(e['id'])
+        queries[qid] = e['query']
+        # gold_ids are string doc IDs matching corpus keys
+        qrels[qid] = {str(did): 1 for did in e['gold_ids']}
 
     print(f"✓ BRIGHT-{subset}: {len(corpus)} docs, {len(queries)} queries")
     return corpus, queries, qrels
