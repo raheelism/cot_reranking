@@ -18,9 +18,10 @@ import matplotlib.pyplot as plt
 from scipy import stats as scipy_stats
 
 # ── Results directory ──────────────────────────────────────────────────────────
-RESULTS_DIR = os.environ.get('RESULTS_DIR', '')
-
-if not RESULTS_DIR:
+_env_dir = os.environ.get('RESULTS_DIR', '')
+if _env_dir and os.path.isdir(_env_dir):
+    RESULTS_DIR = _env_dir
+else:
     try:
         from google.colab import drive
         drive.mount('/content/drive')

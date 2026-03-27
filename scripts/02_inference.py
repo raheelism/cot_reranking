@@ -20,16 +20,17 @@ assert torch.cuda.is_available(), 'GPU required. Runtime > Change runtime type >
 print(f'✓ GPU: {torch.cuda.get_device_name(0)}')
 print(f'  VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')
 
-# ── Results directory — set via env var or platform default ───────────────────
-RESULTS_DIR = os.environ.get('RESULTS_DIR', '')
-
-if not RESULTS_DIR:
+# ── Results directory ──────────────────────────────────────────────────────────
+# Priority: env var (if dir exists) → Colab Drive → repo/results/ fallback
+_env_dir = os.environ.get('RESULTS_DIR', '')
+if _env_dir and os.path.isdir(_env_dir):
+    RESULTS_DIR = _env_dir
+else:
     try:
         from google.colab import drive
         drive.mount('/content/drive')
         RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
     except Exception:
-        # Kaggle or any platform where Drive mount isn't available
         RESULTS_DIR = os.path.join(PROJECT_ROOT, 'results')
 
 os.makedirs(RESULTS_DIR, exist_ok=True)
