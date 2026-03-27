@@ -18,20 +18,14 @@ import matplotlib.pyplot as plt
 from scipy import stats as scipy_stats
 
 # ── Results directory ──────────────────────────────────────────────────────────
-_repo_results = os.path.join(PROJECT_ROOT, 'results')
-_has_data = os.path.isdir(_repo_results) and any(
-    f.endswith('.json') for f in os.listdir(_repo_results)
-)
-
-if _has_data:
-    RESULTS_DIR = _repo_results
-else:
+RESULTS_DIR = os.environ.get('RESULTS_DIR', '')
+if not RESULTS_DIR:
     try:
         from google.colab import drive
         drive.mount('/content/drive')
         RESULTS_DIR = '/content/drive/MyDrive/cot_reranking_results'
     except Exception:
-        RESULTS_DIR = _repo_results
+        RESULTS_DIR = os.path.join(PROJECT_ROOT, 'results')
 
 FIGURES_DIR = f'{RESULTS_DIR}/figures'
 os.makedirs(FIGURES_DIR, exist_ok=True)
