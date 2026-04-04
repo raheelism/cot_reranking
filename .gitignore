@@ -5,9 +5,8 @@ datasets/
 results/**/*.json
 results/*.json
 
-# Generated figures
+# Generated figures (track PNGs — they are paper figures)
 figures/*.pdf
-figures/*.png
 figures/*.svg
 
 # User-filled query labels (not the template)
